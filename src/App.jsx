@@ -1,5 +1,20 @@
 /* eslint-disable */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, onValue } from "firebase/database";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBr-Vq8kDPrxNv8RojdrPa_GUgXth2tHmg",
+  authDomain: "teamnight-d909b.firebaseapp.com",
+  databaseURL: "https://teamnight-d909b-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "teamnight-d909b",
+  storageBucket: "teamnight-d909b.firebasestorage.app",
+  messagingSenderId: "440378727824",
+  appId: "1:440378727824:web:2c4bf51c6c57f8f7d96715"
+};
+
+let fdb = null;
+try { fdb = getDatabase(initializeApp(firebaseConfig)); } catch (e) {}
 
 // ⚠️ 각 설비 배포 URL을 아래 url 항목에 채워넣으세요
 const FACILITIES = [
@@ -32,6 +47,15 @@ export default function App() {
     return {};
   });
   const [editMode, setEditMode] = useState(false);
+  const [summary, setSummary] = useState({});
+
+  useEffect(() => {
+    if (!fdb) return;
+    const unsub = onValue(ref(fdb, "summary"), snap => {
+      setSummary(snap.val() || {});
+    });
+    return unsub;
+  }, []);
 
   const toggleLock = (id) => {
     const next = { ...locked, [id]: !locked[id] };
@@ -44,7 +68,13 @@ export default function App() {
   const month = now.getMonth() + 1;
   const day = now.getDate();
 
-  const activeFacilities = FACILITIES.filter(f => f.ready && !locked[f.id]);
+  const LIVE = FACILITIES.map(f => ({
+    ...f,
+    pct: summary[f.id] && typeof summary[f.id].pct === "number" ? summary[f.id].pct : 0,
+    round: summary[f.id] && summary[f.id].round ? summary[f.id].round : null,
+  }));
+
+  const activeFacilities = LIVE.filter(f => f.ready && !locked[f.id]);
   const totalPct = activeFacilities.length > 0
     ? Math.round(activeFacilities.reduce((s,f) => s+f.pct, 0) / activeFacilities.length)
     : 0;
@@ -93,7 +123,7 @@ export default function App() {
 
       {/* 설비 그리드 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-        {FACILITIES.map(f => {
+        {LIVE.map(f => {
           const isLocked = locked[f.id] || false;
           const clickable = f.ready && !isLocked && !editMode;
           const CardInner = (
@@ -122,7 +152,7 @@ export default function App() {
               </div>
 
               <div style={{ fontSize: 11, fontWeight: 800, color: f.ready ? f.color : S.textSub, marginBottom: 3, lineHeight: 1.2 }}>{f.name}</div>
-              <div style={{ fontSize: 10, color: S.textSub }}>{isLocked ? "미운영" : f.ready ? f.sub : "준비중"}</div>
+              <div style={{ fontSize: 10, color: S.textSub }}>{isLocked ? "미운영" : f.ready ? (f.round ? `${f.round}차 진행중` : f.sub) : "준비중"}</div>
 
               {clickable && (
                 <div style={{ marginTop: 8, fontSize: 9, background: f.color+"15", color: f.color, borderRadius: 10, padding: "3px 8px", fontWeight: 700, border: `1px solid ${f.color}33` }}>
