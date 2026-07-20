@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, onValue } from "firebase/database";
+import { getDatabase, ref, onValue, remove, set } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBr-Vq8kDPrxNv8RojdrPa_GUgXth2tHmg",
@@ -63,6 +63,44 @@ export default function App() {
     try { localStorage.setItem("dash_locked", JSON.stringify(next)); } catch (e) {}
   };
 
+  const [resetConfirm, setResetConfirm] = useState(null); // null | "all" | facilityId
+  const [resetAllConfirm, setResetAllConfirm] = useState(false);
+
+  const FB_PATHS = {
+    mdas: ["mdas/data", "mdas/total", "summary/mdas"],
+    maps: ["maps/data", "summary/maps"],
+    qps: ["qps/data", "qps/round", "summary/qps"],
+    ons: ["ons/data", "summary/ons"],
+    dansu: ["dansu/data", "summary/dansu"],
+    flash: ["flash/data", "flash/total", "summary/flash"],
+    pas: ["pas/data", "pas/total", "summary/pas"],
+    "3ds": ["sorter3d/data", "sorter3d/totals", "summary/3ds"],
+  };
+
+  const resetFacility = (id) => {
+    if (resetConfirm !== id) {
+      setResetConfirm(id);
+      setTimeout(() => setResetConfirm(null), 3000);
+      return;
+    }
+    if (fdb && FB_PATHS[id]) {
+      FB_PATHS[id].forEach(p => { try { remove(ref(fdb, p)); } catch (e) {} });
+    }
+    setResetConfirm(null);
+  };
+
+  const resetAll = () => {
+    if (!resetAllConfirm) {
+      setResetAllConfirm(true);
+      setTimeout(() => setResetAllConfirm(false), 3000);
+      return;
+    }
+    if (fdb) {
+      Object.values(FB_PATHS).flat().forEach(p => { try { remove(ref(fdb, p)); } catch (e) {} });
+    }
+    setResetAllConfirm(false);
+  };
+
   const now = new Date();
   const timeStr = `${now.getHours()}시${now.getMinutes().toString().padStart(2,"0")}분`;
   const month = now.getMonth() + 1;
@@ -95,7 +133,7 @@ export default function App() {
         }}>
           {editMode ? "✓ 완료" : "⚙️ 설비 관리"}
         </button>
-        {editMode && <div style={{ fontSize: 11, color: "#7c3aed", marginTop: 6, fontWeight: 600 }}>카드를 탭하면 잠금/해제됩니다</div>}
+        {editMode && <div style={{ fontSize: 11, color: "#7c3aed", marginTop: 6, fontWeight: 600 }}>잠금/해제: 카드 탭 · 초기화: 카드 내 ↺ 버튼</div>}
       </div>
 
       {/* 전체 진행률 */}
@@ -160,9 +198,16 @@ export default function App() {
                 </div>
               )}
               {editMode && (
-                <div style={{ marginTop: 8, fontSize: 9, background: isLocked ? "#fee2e2" : "#ede9fe", color: isLocked ? "#dc2626" : "#7c3aed", borderRadius: 10, padding: "3px 8px", fontWeight: 700 }}>
-                  {isLocked ? "잠김 · 탭하여 해제" : "운영중 · 탭하여 잠금"}
-                </div>
+                <>
+                  <div style={{ marginTop: 8, fontSize: 9, background: isLocked ? "#fee2e2" : "#ede9fe", color: isLocked ? "#dc2626" : "#7c3aed", borderRadius: 10, padding: "3px 8px", fontWeight: 700 }}>
+                    {isLocked ? "잠김 · 탭하여 해제" : "운영중 · 탭하여 잠금"}
+                  </div>
+                  {!isLocked && (
+                    <div onClick={e => { e.stopPropagation(); resetFacility(f.id); }} style={{ marginTop: 4, fontSize: 9, background: resetConfirm === f.id ? "#fee2e2" : "#f8fafc", color: resetConfirm === f.id ? "#dc2626" : "#94a3b8", borderRadius: 10, padding: "3px 8px", fontWeight: 700, border: `1px solid ${resetConfirm === f.id ? "#fecaca" : "#e2e8f0"}`, cursor: "pointer" }}>
+                      {resetConfirm === f.id ? "한번더 탭 → 초기화" : "↺ 데이터 초기화"}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           );
@@ -174,10 +219,19 @@ export default function App() {
         })}
       </div>
 
+      {/* 전체 초기화 - 편집모드에서만 */}
+      {editMode && (
+        <button onClick={resetAll} style={{ width: "100%", background: resetAllConfirm ? "#fee2e2" : S.card, border: `1px solid ${resetAllConfirm ? "#dc2626" : "#fecaca"}`, borderRadius: 12, padding: "12px 0", cursor: "pointer", color: "#dc2626", fontSize: 13, fontWeight: 700, marginTop: 16, boxShadow: S.shadow, fontFamily: "inherit" }}>
+          {resetAllConfirm ? "한 번 더 탭하면 전 설비 초기화" : "🔄 전체 데이터 초기화"}
+        </button>
+      )}
+
       {/* 하단 안내 */}
-      <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: S.textSub }}>
-        카드 탭 → 해당 설비 상세 현황
-      </div>
+      {!editMode && (
+        <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: S.textSub }}>
+          카드 탭 → 해당 설비 상세 현황
+        </div>
+      )}
     </div>
   );
 }
